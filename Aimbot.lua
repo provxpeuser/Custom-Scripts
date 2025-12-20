@@ -23,31 +23,41 @@ local aimbotActive = false
 local triggerBotEnabled = false
 local flyEnabled = false
 
-local currentTarget = nil
+local currentTarget
 local cameraConn, flyConn
 local tagMap = {}
+local espReloadConn
 
 --// GUI STATE
 local mainGui
 local uiVisible = true
 
---// ================= ESP (PURPLE + BLACK NAMETAG) =================
+--// ================= ESP =================
+
+local function removeNametag(player)
+    if tagMap[player] then
+        tagMap[player]:Destroy()
+        tagMap[player] = nil
+    end
+end
 
 local function createNametag(player)
     if player == LocalPlayer then return end
-    if not player.Character or tagMap[player] then return end
+    if not player.Character then return end
 
     local head = player.Character:FindFirstChild("Head")
     if not head then return end
 
-    local billboard = Instance.new("BillboardGui")
-    billboard.Name = "_MelrahTag"
-    billboard.Adornee = head
-    billboard.Size = UDim2.new(0, 140, 0, 32)
-    billboard.StudsOffset = Vector3.new(0, 2.6, 0)
-    billboard.AlwaysOnTop = true
+    removeNametag(player)
 
-    local frame = Instance.new("Frame", billboard)
+    local gui = Instance.new("BillboardGui")
+    gui.Name = "_MelrahESP"
+    gui.Adornee = head
+    gui.Size = UDim2.new(0, 150, 0, 34)
+    gui.StudsOffset = Vector3.new(0, 2.6, 0)
+    gui.AlwaysOnTop = true
+
+    local frame = Instance.new("Frame", gui)
     frame.Size = UDim2.new(1, 0, 1, 0)
     frame.BackgroundColor3 = BLACK
     frame.BorderSizePixel = 0
@@ -57,25 +67,18 @@ local function createNametag(player)
     stroke.Color = PURPLE
     stroke.Thickness = 1.5
 
-    local label = Instance.new("TextLabel", frame)
-    label.Size = UDim2.new(1, -6, 1, -6)
-    label.Position = UDim2.new(0, 3, 0, 3)
-    label.BackgroundTransparency = 1
-    label.Text = player.Name
-    label.Font = Enum.Font.GothamBold
-    label.TextScaled = true
-    label.TextColor3 = PURPLE
-    label.TextStrokeTransparency = 0
+    local text = Instance.new("TextLabel", frame)
+    text.Size = UDim2.new(1, -6, 1, -6)
+    text.Position = UDim2.new(0, 3, 0, 3)
+    text.BackgroundTransparency = 1
+    text.Text = player.Name
+    text.Font = Enum.Font.GothamBold
+    text.TextScaled = true
+    text.TextColor3 = PURPLE
+    text.TextStrokeTransparency = 0
 
-    billboard.Parent = head
-    tagMap[player] = billboard
-end
-
-local function removeNametag(player)
-    if tagMap[player] then
-        tagMap[player]:Destroy()
-        tagMap[player] = nil
-    end
+    gui.Parent = head
+    tagMap[player] = gui
 end
 
 local function refreshESP()
@@ -88,6 +91,15 @@ local function refreshESP()
     end
 end
 
+local function startESPReload()
+    if espReloadConn then espReloadConn:Disconnect() end
+    espReloadConn = RunService.Heartbeat:Connect(function(dt)
+        if tick() % 1 < dt and espEnabled then
+            refreshESP()
+        end
+    end)
+end
+
 --// ================= AIMBOT =================
 
 local function angleToCamera(pos)
@@ -97,7 +109,6 @@ end
 
 local function findTarget()
     local best, bestScore = nil, math.huge
-
     for _, p in ipairs(Players:GetPlayers()) do
         if p ~= LocalPlayer and p.Character then
             local head = p.Character:FindFirstChild("Head")
@@ -116,27 +127,17 @@ local function findTarget()
             end
         end
     end
-
     return best
 end
 
 local function startAimbot(target)
     if cameraConn then cameraConn:Disconnect() end
-
     cameraConn = RunService.RenderStepped:Connect(function()
         if not aimbotActive or not target.Character then return end
-
         local head = target.Character:FindFirstChild("Head")
         if not head then return end
-
         local goal = CFrame.new(Camera.CFrame.Position, head.Position)
-        local alpha = math.clamp(1 - SMOOTHNESS / 200, 0.05, 0.9)
-        Camera.CFrame = Camera.CFrame:Lerp(goal, alpha)
-
-        if triggerBotEnabled then
-            local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
-            if tool then pcall(function() tool:Activate() end) end
-        end
+        Camera.CFrame = Camera.CFrame:Lerp(goal, math.clamp(1 - SMOOTHNESS / 200, 0.05, 0.9))
     end)
 end
 
@@ -144,47 +145,14 @@ local function stopAimbot()
     if cameraConn then cameraConn:Disconnect() end
 end
 
---// ================= FLY =================
-
-local function startFly()
-    if flyConn then flyConn:Disconnect() end
-    local char = LocalPlayer.Character
-    if not char then return end
-
-    local root = char:FindFirstChild("HumanoidRootPart")
-    local hum = char:FindFirstChild("Humanoid")
-    if not root or not hum then return end
-
-    hum.PlatformStand = true
-
-    flyConn = RunService.RenderStepped:Connect(function()
-        local dir = Vector3.zero
-        if UserInputService:IsKeyDown(Enum.KeyCode.W) then dir += Camera.CFrame.LookVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.S) then dir -= Camera.CFrame.LookVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.A) then dir -= Camera.CFrame.RightVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.D) then dir += Camera.CFrame.RightVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then dir += Vector3.yAxis end
-        if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then dir -= Vector3.yAxis end
-
-        if dir.Magnitude > 0 then
-            root.AssemblyLinearVelocity = dir.Unit * 50
-        end
-    end)
-end
-
-local function stopFly()
-    if flyConn then flyConn:Disconnect() end
-    local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
-    if hum then hum.PlatformStand = false end
-end
-
---// ================= GUI (UPSIDE RECTANGLE) =================
+--// ================= GUI =================
 
 local function makeGui()
     mainGui = Instance.new("ScreenGui")
     mainGui.Name = "melrah_aimbot"
     mainGui.ResetOnSpawn = false
-    mainGui.Parent = LocalPlayer.PlayerGui
+    mainGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
+    mainGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 
     local panel = Instance.new("Frame", mainGui)
     panel.Size = UDim2.new(0, 520, 0, 80)
@@ -192,6 +160,7 @@ local function makeGui()
     panel.AnchorPoint = Vector2.new(0.5, 0)
     panel.BackgroundColor3 = BLACK
     panel.BorderSizePixel = 0
+    panel.ZIndex = 999
     Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 20)
 
     local stroke = Instance.new("UIStroke", panel)
@@ -205,6 +174,7 @@ local function makeGui()
     title.Font = Enum.Font.GothamBold
     title.TextSize = 28
     title.TextColor3 = PURPLE
+    title.ZIndex = 1000
 
     local function button(text, x)
         local b = Instance.new("TextButton", panel)
@@ -215,14 +185,13 @@ local function makeGui()
         b.TextColor3 = Color3.new(1,1,1)
         b.BackgroundColor3 = DARK_PURPLE
         b.BorderSizePixel = 0
+        b.ZIndex = 1001
         Instance.new("UICorner", b).CornerRadius = UDim.new(0, 8)
         return b
     end
 
     local espBtn = button("ESP : ON", 20)
     local aimBtn = button("AIM : OFF", 120)
-    local trigBtn = button("TRIGGER : OFF", 220)
-    local flyBtn = button("FLY : OFF", 340)
 
     espBtn.MouseButton1Click:Connect(function()
         espEnabled = not espEnabled
@@ -235,33 +204,18 @@ local function makeGui()
         aimBtn.Text = aimbotEnabled and "AIM : ON (Q)" or "AIM : OFF"
         stopAimbot()
     end)
-
-    trigBtn.MouseButton1Click:Connect(function()
-        triggerBotEnabled = not triggerBotEnabled
-        trigBtn.Text = triggerBotEnabled and "TRIGGER : ON" or "TRIGGER : OFF"
-    end)
-
-    flyBtn.MouseButton1Click:Connect(function()
-        flyEnabled = not flyEnabled
-        flyBtn.Text = flyEnabled and "FLY : ON" or "FLY : OFF"
-        if flyEnabled then startFly() else stopFly() end
-    end)
 end
 
 --// ================= INPUT =================
 
-UserInputService.InputBegan:Connect(function(input, processed)
-    if processed then return end
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
 
-    -- Toggle UI
     if input.KeyCode == Enum.KeyCode.RightControl then
         uiVisible = not uiVisible
-        if mainGui then
-            mainGui.Enabled = uiVisible
-        end
+        mainGui.Enabled = uiVisible
     end
 
-    -- Aimbot hold
     if input.KeyCode == Enum.KeyCode.Q and aimbotEnabled then
         aimbotActive = true
         currentTarget = findTarget()
@@ -282,6 +236,7 @@ end)
 
 makeGui()
 refreshESP()
+startESPReload()
 
 Players.PlayerAdded:Connect(refreshESP)
 Players.PlayerRemoving:Connect(removeNametag)
