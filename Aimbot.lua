@@ -24,6 +24,7 @@ local UI_TOGGLE_KEY = Enum.KeyCode.RightControl
 local espEnabled = true
 local aimbotEnabled = false
 local aimbotActive = false
+local ignoreTeam = true
 
 local currentTarget
 local cameraConn
@@ -33,6 +34,11 @@ local uiVisible = true
 local listeningForKey = nil
 
 --// ================= ESP =================
+
+local function isAlive(character)
+    local hum = character and character:FindFirstChildOfClass("Humanoid")
+    return hum and hum.Health > 0
+end
 
 local function removeNametag(player)
     if tagMap[player] then
@@ -44,11 +50,18 @@ end
 local function createNametag(player)
     if player == LocalPlayer then return end
     if not player.Character then return end
+    if not isAlive(player.Character) then
+        removeNametag(player)
+        return
+    end
+    if ignoreTeam and player.Team == LocalPlayer.Team then
+        removeNametag(player)
+        return
+    end
 
     local head = player.Character:FindFirstChild("Head")
     if not head then return end
 
-    -- Always rebuild safely
     removeNametag(player)
 
     local billboard = Instance.new("BillboardGui")
@@ -106,6 +119,9 @@ local function findTarget()
 
     for _, p in ipairs(Players:GetPlayers()) do
         if p ~= LocalPlayer and p.Character then
+            if ignoreTeam and p.Team == LocalPlayer.Team then continue end
+            if not isAlive(p.Character) then continue end
+
             local head = p.Character:FindFirstChild("Head")
             if head then
                 local dist = (head.Position - Camera.CFrame.Position).Magnitude
@@ -131,6 +147,7 @@ local function startAimbot(target)
     if cameraConn then cameraConn:Disconnect() end
     cameraConn = RunService.RenderStepped:Connect(function()
         if not aimbotActive or not target.Character then return end
+        if not isAlive(target.Character) then return end
         local head = target.Character:FindFirstChild("Head")
         if not head then return end
         Camera.CFrame = Camera.CFrame:Lerp(
@@ -154,25 +171,25 @@ local function makeGui()
     mainGui.Parent = LocalPlayer.PlayerGui
 
     local panel = Instance.new("Frame", mainGui)
-    panel.Size = UDim2.new(0, 600, 0, 80)
-    panel.Position = UDim2.new(0.5, -300, 0, 20)
+    panel.Size = UDim2.new(0, 640, 0, 90)
+    panel.Position = UDim2.new(0.5, -320, 0, 20)
     panel.AnchorPoint = Vector2.new(0.5, 0)
     panel.BackgroundColor3 = BLACK
     panel.BorderSizePixel = 0
     Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 20)
 
     local title = Instance.new("TextLabel", panel)
-    title.Size = UDim2.new(1, 0, 1, 0)
+    title.Size = UDim2.new(1, 0, 0.5, 0)
     title.BackgroundTransparency = 1
     title.Text = "💜 MELRAH AIMBOT"
     title.Font = Enum.Font.GothamBold
-    title.TextSize = 28
+    title.TextSize = 26
     title.TextColor3 = PURPLE
 
     local function button(text, x)
         local b = Instance.new("TextButton", panel)
-        b.Size = UDim2.new(0, 130, 0, 32)
-        b.Position = UDim2.new(0, x, 1, 8)
+        b.Size = UDim2.new(0, 140, 0, 32)
+        b.Position = UDim2.new(0, x, 0.6, 0)
         b.Text = text
         b.Font = Enum.Font.GothamBold
         b.TextColor3 = Color3.new(1,1,1)
@@ -182,12 +199,18 @@ local function makeGui()
     end
 
     local aimBtn = button("AIM : OFF", 20)
-    local bindAim = button("AIM KEY", 170)
-    local bindUI = button("UI KEY", 330)
+    local teamBtn = button("IGNORE TEAM : ON", 180)
+    local bindAim = button("AIM KEY", 360)
+    local bindUI = button("UI KEY", 500)
 
     aimBtn.MouseButton1Click:Connect(function()
         aimbotEnabled = not aimbotEnabled
         aimBtn.Text = aimbotEnabled and "AIM : ON" or "AIM : OFF"
+    end)
+
+    teamBtn.MouseButton1Click:Connect(function()
+        ignoreTeam = not ignoreTeam
+        teamBtn.Text = ignoreTeam and "IGNORE TEAM : ON" or "IGNORE TEAM : OFF"
     end)
 
     bindAim.MouseButton1Click:Connect(function()
@@ -249,4 +272,4 @@ refreshESP()
 Players.PlayerAdded:Connect(refreshESP)
 Players.PlayerRemoving:Connect(removeNametag)
 
-print("💜 melrah aimbot loaded | name-fixed ESP")
+print("💜 melrah aimbot loaded | team & alive safe")
