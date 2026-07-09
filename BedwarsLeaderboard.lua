@@ -16,7 +16,7 @@ local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 -- =============================================
 local CONFIG = {
     TITLE         = "BED WARS",
-    WEBSITE       = "www.hypixel.net",
+    WEBSITE       = "easy.gg",
     UPDATE_RATE   = 0.5,   -- seconds between updates
     WIDTH         = 210,   -- px width of the board
     BG_ALPHA      = 0.55,  -- background transparency
